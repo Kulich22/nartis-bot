@@ -1,0 +1,14 @@
+python-telegram-bot==20.7
+pillow
+python-docx
+pandas
+openpyxl
+qrcode
+reportlab
+numpy
+httpx
+anyio
+certifi
+fastapi
+uvicorn
+python-multipart
