@@ -49,7 +49,8 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = "8603254098:AAFvj8bxbbRrEf_8emQh4JlSO9rHELcujJI"
 
 ADMIN_ID = 630597358  # Главный администратор
-API_PORT  = 8080      # Порт для Mini App API
+import os
+API_PORT = int(os.getenv("PORT", 8080))
 
 # Состояния ConversationHandler
 (
