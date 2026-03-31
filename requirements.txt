@@ -5,6 +5,7 @@ pandas
 openpyxl
 qrcode
 reportlab
+pyzbar
 numpy
 httpx
 anyio
