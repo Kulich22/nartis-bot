@@ -386,6 +386,10 @@
   <div class="field-label">Имя (необязательно)</div>
   <input type="text" id="admin-new-name" placeholder="Иван Иванов">
   <button class="btn-primary" onclick="adminAddUser()">➕ Добавить пользователя</button>
+  <div style="text-align:center;margin-top:16px">
+  <button onclick="resetUser()" style="background:none;border:none;color:var(--hint);font-size:12px;cursor:pointer;text-decoration:underline">
+    Сменить аккаунт
+  </button>
 </div>
 
 <!-- ══ ELEMENTS ══ -->
@@ -433,6 +437,8 @@ async function init() {
     return;
   }
 
+
+
   // Проверяем доступ и права
   try {
     const fd = new FormData();
@@ -465,8 +471,27 @@ if (!userId) {
     const id = prompt('Введите ваш Telegram ID (узнайте через /myid в боте):');
     if (id && parseInt(id)) {
       userId = parseInt(id);
-      localStorage.setItem('tg_user_id', id);
+      // Проверяем доступ перед сохранением
+      const fd = new FormData();
+      fd.append('user_id', userId);
+      fetch(API_URL + '/api/check', {method:'POST', body:fd})
+        .then(r => r.json())
+        .then(data => {
+          if (data.allowed) {
+            localStorage.setItem('tg_user_id', id);
+          } else {
+            alert('❌ Нет доступа. Обратитесь к администратору.');
+            userId = 0;
+          }
+        });
     }
+  }
+}
+
+function resetUser() {
+  if (confirm('Сменить Telegram ID?')) {
+    localStorage.removeItem('tg_user_id');
+    location.reload();
   }
 }
 
