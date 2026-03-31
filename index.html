@@ -411,7 +411,7 @@ tg.ready();
 tg.expand();
 
 const user = tg.initDataUnsafe?.user;
-let userId = user?.id || 0;
+let userId = user?.id || parseInt(localStorage.getItem('tg_user_id') || '0');
 let isAdmin = false;
 
 // Хранилище данных экранов
@@ -453,6 +453,20 @@ async function init() {
     }
   } catch(e) {
     badge.innerHTML = '⚠️ Нет связи с сервером · <small>' + API_URL + '</small>';
+  }
+}
+
+// Браузерный вход
+if (!userId) {
+  const saved = localStorage.getItem('tg_user_id');
+  if (saved) {
+    userId = parseInt(saved);
+  } else {
+    const id = prompt('Введите ваш Telegram ID (узнайте через /myid в боте):');
+    if (id && parseInt(id)) {
+      userId = parseInt(id);
+      localStorage.setItem('tg_user_id', id);
+    }
   }
 }
 
