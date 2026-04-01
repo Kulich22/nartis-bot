@@ -204,6 +204,11 @@
   <input type="file" id="fi-scan" accept="image/*" onchange="fileSelected('scan',this)">
   <button class="btn-primary" id="btn-run-scan" disabled onclick="runScan()">▶ Сканировать</button>
   <div id="result-scan"></div>
+  <div id="scan-edit-section" style="display:none">
+    <div class="field-label">Редактировать серийные номера</div>
+    <textarea id="scan-serials-edit" rows="6" style="font-family:monospace;font-size:13px;width:100%;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:var(--fg);padding:12px;margin-top:6px"></textarea>
+    <button class="btn-secondary copy-btn" onclick="copyScanSerials()">📋 Скопировать все</button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -319,6 +324,8 @@
   <div id="supply-phase2" style="display:none">
     <div class="section-title">Подтвердите результат сканирования</div>
     <div id="supply-scan-result"></div>
+    <div class="field-label">Серийные номера (можно редактировать)</div>
+    <textarea id="supply-serials-edit" rows="6" placeholder="Серийные номера..." style="font-family:monospace;font-size:13px;width:100%;background:var(--bg2);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:var(--fg);padding:12px;margin-top:6px"></textarea>
     <div class="field-label">Номер / название коробки</div>
     <input type="text" id="supply-box-name" placeholder="Коробка 1">
     <button class="btn-primary" onclick="supplyConfirmBox()">✅ Добавить коробку</button>
@@ -399,7 +406,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  КОНФИГУРАЦИЯ — ЗАМЕНИТЕ НА ВАШ АДРЕС СЕРВЕРА
 // ═══════════════════════════════════════════════════════════════
-const API_URL = 'https://nartis-bot-production.up.railway.app';
+const API_URL = 'https://ave-preparing-programmes-overhead.trycloudflare.com';
 // Пример: 'http://192.168.1.100:8080'  (локальная сеть)
 //         'http://1.2.3.4:8080'        (VPS с внешним IP)
 //         'https://your-domain.com'    (с доменом и HTTPS)
@@ -411,7 +418,7 @@ tg.ready();
 tg.expand();
 
 const user = tg.initDataUnsafe?.user;
-let userId = user?.id || parseInt(localStorage.getItem('tg_user_id') || '0');
+let userId = user?.id || 0;
 let isAdmin = false;
 
 // Хранилище данных экранов
@@ -425,48 +432,12 @@ const state = {
 // ── ИНИЦИАЛИЗАЦИЯ ─────────────────────────────────────────────
 async function init() {
   const badge = document.getElementById('user-badge');
-
-  // Браузерный вход — если нет Telegram user
-  if (!userId) {
-    const saved = localStorage.getItem('tg_user_id');
-    if (saved) {
-      userId = parseInt(saved);
-    } else {
-      const id = prompt('Введите ваш Telegram ID\n(узнайте через /myid в боте):');
-      if (id && parseInt(id)) {
-        userId = parseInt(id);
-        // Проверяем доступ перед сохранением
-        try {
-          const fd = new FormData();
-          fd.append('user_id', userId);
-          const r = await fetch(API_URL + '/api/check', { method: 'POST', body: fd });
-          const data = await r.json();
-          if (data.allowed) {
-            localStorage.setItem('tg_user_id', String(userId));
-          } else {
-            alert('❌ Нет доступа. Обратитесь к администратору.');
-            userId = 0;
-            badge.textContent = '⛔ Нет доступа. Обратитесь к администратору.';
-            disableAllCards();
-            return;
-          }
-        } catch(e) {
-          badge.innerHTML = '⚠️ Нет связи с сервером · <small>' + API_URL + '</small>';
-          return;
-        }
-      } else {
-        badge.textContent = '⚠️ Введите Telegram ID для входа';
-        disableAllCards();
-        return;
-      }
-    }
-  }
-
   if (user) {
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Пользователь';
     badge.innerHTML = '👤 <strong>' + name + '</strong> · ID: ' + user.id;
   } else {
-    badge.innerHTML = '👤 ID: <strong>' + userId + '</strong> · <button onclick="resetUser()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">сменить</button>';
+    badge.textContent = '⚠️ Откройте через Telegram';
+    return;
   }
 
   // Проверяем доступ и права
@@ -612,6 +583,8 @@ async function runPlomb() {
 async function runScan() {
   const file = state.files['scan'];
   if (!file) return;
+  document.getElementById('scan-edit-section').style.display = 'none';
+  document.getElementById('scan-serials-edit').value = '';
   showSpinner('🔍 Сканирую штрихкоды...');
   try {
     const fd = new FormData();
@@ -876,8 +849,9 @@ async function runSupplyScan() {
     const skippedNote = data.skipped ? '<br><small>Нечисловых пропущено: ' + data.skipped + '</small>' : '';
     document.getElementById('supply-scan-result').innerHTML =
       '<div class="result-box success"><div class="result-title">✅ Найдено: ' + data.serials.length + ' серийных номеров</div>' +
-      '<div class="result-body">' + skippedNote + '</div>' +
-      '<div class="serials-list">' + data.serials.join('\n') + '</div></div>';
+      '<div class="result-body">' + skippedNote + '</div></div>';
+    // Заполняем редактируемое поле
+    document.getElementById('supply-serials-edit').value = data.serials.join('\n');
     // Предлагаем номер следующей коробки
     document.getElementById('supply-box-name').value = 'Коробка ' + (state.supply.boxes.length + 1);
   } catch(e) {
@@ -889,7 +863,11 @@ async function runSupplyScan() {
 function supplyConfirmBox() {
   const name = document.getElementById('supply-box-name').value.trim();
   if (!name) { toast('Введите название коробки'); return; }
-  state.supply.boxes.push({ label: name, serials: state.supply.currentSerials });
+  // Читаем серийники из редактируемого поля
+  const editedText = document.getElementById('supply-serials-edit').value.trim();
+  const editedSerials = editedText.split('\n').map(s => s.trim()).filter(Boolean);
+  if (editedSerials.length === 0) { toast('Нет серийных номеров'); return; }
+  state.supply.boxes.push({ label: name, serials: editedSerials });
   state.supply.currentSerials = [];
   // Показываем список коробок
   document.getElementById('supply-phase2').style.display = 'none';
@@ -911,6 +889,9 @@ function supplyRetry() {
 }
 
 function supplyAddMore() {
+  // Сбрасываем file input чтобы можно было выбрать новое фото
+  const fi = document.getElementById('fi-supply');
+  fi.value = '';
   supplyRetry();
 }
 
@@ -1015,15 +996,13 @@ async function adminRemoveUser(targetId) {
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
-function today() {
-  return new Date().toLocaleDateString('ru-RU').replace(/\./g, '');
+function copyScanSerials() {
+  const text = document.getElementById('scan-serials-edit').value;
+  navigator.clipboard.writeText(text).then(() => toast('Скопировано!', 'success'));
 }
 
-function resetUser() {
-  if (confirm('Сменить Telegram ID?')) {
-    localStorage.removeItem('tg_user_id');
-    location.reload();
-  }
+function today() {
+  return new Date().toLocaleDateString('ru-RU').replace(/\./g, '');
 }
 
 // ── START ─────────────────────────────────────────────────────
