@@ -386,10 +386,6 @@
   <div class="field-label">Имя (необязательно)</div>
   <input type="text" id="admin-new-name" placeholder="Иван Иванов">
   <button class="btn-primary" onclick="adminAddUser()">➕ Добавить пользователя</button>
-  <div style="text-align:center;margin-top:16px">
-  <button onclick="resetUser()" style="background:none;border:none;color:var(--hint);font-size:12px;cursor:pointer;text-decoration:underline">
-    Сменить аккаунт
-  </button>
 </div>
 
 <!-- ══ ELEMENTS ══ -->
@@ -403,7 +399,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  КОНФИГУРАЦИЯ — ЗАМЕНИТЕ НА ВАШ АДРЕС СЕРВЕРА
 // ═══════════════════════════════════════════════════════════════
-const API_URL = 'https://nartis-bot-production.up.railway.app';
+const API_URL = 'https://ave-preparing-programmes-overhead.trycloudflare.com';
 // Пример: 'http://192.168.1.100:8080'  (локальная сеть)
 //         'http://1.2.3.4:8080'        (VPS с внешним IP)
 //         'https://your-domain.com'    (с доменом и HTTPS)
@@ -429,15 +425,49 @@ const state = {
 // ── ИНИЦИАЛИЗАЦИЯ ─────────────────────────────────────────────
 async function init() {
   const badge = document.getElementById('user-badge');
+
+  // Браузерный вход — если нет Telegram user
+  if (!userId) {
+    const saved = localStorage.getItem('tg_user_id');
+    if (saved) {
+      userId = parseInt(saved);
+    } else {
+      const id = prompt('Введите ваш Telegram ID\n(узнайте через /myid в боте):');
+      if (id && parseInt(id)) {
+        userId = parseInt(id);
+        // Проверяем доступ перед сохранением
+        try {
+          const fd = new FormData();
+          fd.append('user_id', userId);
+          const r = await fetch(API_URL + '/api/check', { method: 'POST', body: fd });
+          const data = await r.json();
+          if (data.allowed) {
+            localStorage.setItem('tg_user_id', String(userId));
+          } else {
+            alert('❌ Нет доступа. Обратитесь к администратору.');
+            userId = 0;
+            badge.textContent = '⛔ Нет доступа. Обратитесь к администратору.';
+            disableAllCards();
+            return;
+          }
+        } catch(e) {
+          badge.innerHTML = '⚠️ Нет связи с сервером · <small>' + API_URL + '</small>';
+          return;
+        }
+      } else {
+        badge.textContent = '⚠️ Введите Telegram ID для входа';
+        disableAllCards();
+        return;
+      }
+    }
+  }
+
   if (user) {
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Пользователь';
     badge.innerHTML = '👤 <strong>' + name + '</strong> · ID: ' + user.id;
   } else {
-    badge.textContent = '⚠️ Откройте через Telegram';
-    return;
+    badge.innerHTML = '👤 ID: <strong>' + userId + '</strong> · <button onclick="resetUser()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">сменить</button>';
   }
-
-
 
   // Проверяем доступ и права
   try {
@@ -459,39 +489,6 @@ async function init() {
     }
   } catch(e) {
     badge.innerHTML = '⚠️ Нет связи с сервером · <small>' + API_URL + '</small>';
-  }
-}
-
-// Браузерный вход
-if (!userId) {
-  const saved = localStorage.getItem('tg_user_id');
-  if (saved) {
-    userId = parseInt(saved);
-  } else {
-    const id = prompt('Введите ваш Telegram ID (узнайте через /myid в боте):');
-    if (id && parseInt(id)) {
-      userId = parseInt(id);
-      // Проверяем доступ перед сохранением
-      const fd = new FormData();
-      fd.append('user_id', userId);
-      fetch(API_URL + '/api/check', {method:'POST', body:fd})
-        .then(r => r.json())
-        .then(data => {
-          if (data.allowed) {
-            localStorage.setItem('tg_user_id', id);
-          } else {
-            alert('❌ Нет доступа. Обратитесь к администратору.');
-            userId = 0;
-          }
-        });
-    }
-  }
-}
-
-function resetUser() {
-  if (confirm('Сменить Telegram ID?')) {
-    localStorage.removeItem('tg_user_id');
-    location.reload();
   }
 }
 
@@ -1020,6 +1017,13 @@ async function adminRemoveUser(targetId) {
 // ── UTILS ─────────────────────────────────────────────────────
 function today() {
   return new Date().toLocaleDateString('ru-RU').replace(/\./g, '');
+}
+
+function resetUser() {
+  if (confirm('Сменить Telegram ID?')) {
+    localStorage.removeItem('tg_user_id');
+    location.reload();
+  }
 }
 
 // ── START ─────────────────────────────────────────────────────
