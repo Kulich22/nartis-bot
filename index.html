@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>CEK store</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   /* ── ВАШ СТИЛЬ (оставьте без изменений) ──────────────────────────────────── */
@@ -104,7 +105,7 @@
 <div id="screen-home" class="screen active">
   <div class="home-header">
     <span class="home-icon">🤖</span>
-    <div class="home-title">Бот для работы со счётчиками</div>
+    <div class="home-title">CEK · Бот для счётчиков</div>
     <div class="home-sub">Выберите нужный режим работы</div>
   </div>
 
@@ -135,6 +136,7 @@
     <span style="font-size:18px">👑</span><span>Панель администратора</span>
   </button>
   <div class="user-badge" id="user-badge">👤 Загрузка...</div>
+  <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--hint)">CEK store v1.0 · <a href="https://t.me/cekstoreebot" style="color:var(--hint);text-decoration:none">@cekstoreebot</a></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -164,11 +166,11 @@
     <button class="back-btn" onclick="goto('home')">← Назад</button>
     <div class="page-title">📦 Сканирование штрихкодов</div>
   </div>
-  <div class="hint-text">Загрузите фото коробки. Для лучшего результата отправляйте без сжатия (как документ в Telegram).</div>
+  <div class="hint-text">Загрузите фото коробки. Лучше всего — крупное чёткое фото при хорошем освещении. Бот найдёт все числовые штрихкоды.</div>
   <div class="upload-zone" id="uz-scan" onclick="document.getElementById('fi-scan').click()">
     <div class="uz-icon">📸</div>
     <div class="uz-title">Выбрать фото</div>
-    <div class="uz-sub">JPG, PNG или другой формат изображения</div>
+    <div class="uz-sub">JPG, PNG · перетащите или нажмите для выбора</div>
   </div>
   <input type="file" id="fi-scan" accept="image/*" onchange="fileSelected('scan',this)">
   <button class="btn-primary" id="btn-run-scan" disabled onclick="runScan()">▶ Сканировать</button>
@@ -417,9 +419,8 @@ async function init() {
           if (data.allowed) {
             localStorage.setItem('tg_user_id', String(userId));
           } else {
-            alert('❌ Нет доступа. Обратитесь к администратору.');
             userId = 0;
-            badge.textContent = '⛔ Нет доступа. Обратитесь к администратору.';
+            badge.innerHTML = '⛔ ID не найден · <button onclick="resetUser()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">попробовать снова</button>';
             disableAllCards();
             return;
           }
@@ -428,7 +429,7 @@ async function init() {
           return;
         }
       } else {
-        badge.textContent = '⚠️ Введите Telegram ID для входа';
+        badge.innerHTML = '⚠️ Нужна авторизация · <button onclick="resetUser()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">войти</button>';
         disableAllCards();
         return;
       }
@@ -439,6 +440,7 @@ async function init() {
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Пользователь';
     badge.innerHTML = '👤 <strong>' + name + '</strong> · ID: ' + user.id;
   } else {
+    const now = new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
     badge.innerHTML = '👤 ID: <strong>' + userId + '</strong> · <button onclick="resetUser()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">сменить</button>';
   }
 
@@ -450,7 +452,7 @@ async function init() {
       const data = await r.json();
       if (!data.allowed) {
         showScreen('home');
-        badge.textContent = '⛔ Нет доступа. Обратитесь к администратору.';
+        badge.innerHTML = '⛔ Нет доступа · <button onclick="resetUser()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">сменить ID</button>';
         disableAllCards();
         return;
       }
@@ -460,7 +462,7 @@ async function init() {
       }
     }
   } catch(e) {
-    badge.innerHTML = '⚠️ Нет связи с сервером · <small>' + API_URL + '</small>';
+    badge.innerHTML = '⚠️ Нет связи с сервером · <button onclick="location.reload()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">обновить</button>';
   }
 }
 
@@ -1030,10 +1032,8 @@ function today() {
 }
 
 function resetUser() {
-  if (confirm('Сменить Telegram ID?')) {
-    localStorage.removeItem('tg_user_id');
-    location.reload();
-  }
+  localStorage.removeItem('tg_user_id');
+  location.reload();
 }
 
 init();
