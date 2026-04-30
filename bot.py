@@ -12,7 +12,7 @@ from pathlib import Path
 from io import BytesIO
 
 try:
-    from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+    from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse
     from starlette.background import BackgroundTask
@@ -46,11 +46,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Конфигурация
 # ---------------------------------------------------------------------------
-BOT_TOKEN = "8603254098:AAFvj8bxbbRrEf_8emQh4JlSO9rHELcujJI"
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8603254098:AAFvj8bxbbRrEf_8emQh4JlSO9rHELcujJI")
 
-ADMIN_ID = 630597358  # Главный администратор
-import os
+ADMIN_ID = int(os.getenv("ADMIN_ID", "630597358"))  # Главный администратор
 API_PORT = int(os.getenv("PORT", 8080))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")  # Если задан - используем webhook, иначе polling
 
 # Состояния ConversationHandler
 (
@@ -66,7 +66,8 @@ API_PORT = int(os.getenv("PORT", 8080))
     SUPPLY_WAITING_PHOTO,       # «Новая поставка»: ожидание фото коробки
     SUPPLY_WAITING_NUMBER,      # «Новая поставка»: ожидание ввода номера коробки
     SUPPLY_EDITING_SERIALS,     # «Новая поставка»: ручное редактирование серийников
-) = range(12)
+    ACCEPTANCE_INPUT,        # «Полуавт. приёмка»: ожидание сканирования
+) = range(13)
 
 # Пути
 BASE_DIR = Path(__file__).parent
@@ -891,6 +892,7 @@ def main_keyboard(user_id: int = 0) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📲 Генерация QR-кодов", callback_data="qr"),
             InlineKeyboardButton("🚚 Новая поставка", callback_data="supply"),
         ],
+        [InlineKeyboardButton("⚡ Полуавт. приёмка", callback_data="acceptance")],
         [InlineKeyboardButton("❓ Помощь", callback_data="help")],
     ]
     if user_id == ADMIN_ID:
@@ -1524,6 +1526,14 @@ async def btn_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "supply_finish":
         return await supply_finish(update, context)
+
+    # --- Полуавтоматическая приёмка ---
+    if data == "acceptance":
+        return await acceptance_start(update, context)
+    if data == "acceptance_clear":
+        return await acceptance_clear(update, context)
+    if data == "acceptance_done":
+        return await acceptance_done(update, context)
 
     return CHOOSING
 
@@ -2712,6 +2722,9 @@ if FASTAPI_AVAILABLE:
     # Сессии для многошагового процесса (гарантия, поставка)
     _api_sessions: dict = {}
 
+    # Глобальная переменная для application (будет установлена в main)
+    _telegram_app = None
+
     def _api_require_access(user_id: int):
         if not is_allowed(user_id):
             raise HTTPException(status_code=403, detail="Нет доступа. Обратитесь к администратору.")
@@ -2723,6 +2736,32 @@ if FASTAPI_AVAILABLE:
                     os.remove(p)
             except Exception:
                 pass
+
+    # ── Webhook endpoint ─────────────────────────────────────────────────────
+    @api_app.post("/webhook")
+    async def webhook_handler(request: Request):
+        """Обработка webhook от Telegram"""
+        try:
+            if _telegram_app is None:
+                return {"ok": False, "error": "Bot not initialized"}
+
+            data = await request.json()
+
+            # Запускаем обработку в фоне, сразу возвращаем ответ
+            asyncio.create_task(process_telegram_update(data))
+
+            return {"ok": True}
+        except Exception as e:
+            logger.error(f"Webhook error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    async def process_telegram_update(data: dict):
+        """Обработка обновления от Telegram в фоне"""
+        try:
+            update = Update.de_json(data, _telegram_app.bot)
+            await _telegram_app.process_update(update)
+        except Exception as e:
+            logger.error(f"Update processing error: {e}")
 
     # ── Ping ────────────────────────────────────────────────────────────────
     @api_app.get("/api/ping")
@@ -2744,8 +2783,14 @@ if FASTAPI_AVAILABLE:
         in_path = str(TEMP_DIR / f"api_plomb_{user_id}_{ts}{suffix}")
         out_path = None
         try:
+            file_data = await file.read()
+
+            # Сохраняем файл пользователя
+            _save_user_file(user_id, file_data, f"plomb_{file.filename}")
+
             with open(in_path, "wb") as fh:
-                fh.write(await file.read())
+                fh.write(file_data)
+
             res = plomb_proc.process_file(in_path)
             if not res["success"]:
                 raise HTTPException(status_code=400, detail=res["error"])
@@ -2768,6 +2813,24 @@ if FASTAPI_AVAILABLE:
     @api_app.post("/api/scan")
     async def api_scan(user_id: int = Form(...), file: UploadFile = File(...)):
         _api_require_access(user_id)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suffix = Path(file.filename).suffix.lower() or ".jpg"
+        tmp_path = str(TEMP_DIR / f"api_scan_{user_id}_{ts}{suffix}")
+        try:
+            file_data = await file.read()
+
+            # Сохраняем файл пользователя
+            _save_user_file(user_id, file_data, f"scan_{file.filename}")
+
+            with open(tmp_path, "wb") as fh:
+                fh.write(file_data)
+
+            serials, skipped = scan_barcodes_from_image(tmp_path)
+            return {"serials": serials, "skipped": skipped}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            _cleanup_files(tmp_path)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         suffix = Path(file.filename).suffix.lower() or ".jpg"
         img_path = str(TEMP_DIR / f"api_scan_{user_id}_{ts}{suffix}")
@@ -3026,10 +3089,376 @@ if FASTAPI_AVAILABLE:
         remove_user(target_user_id)
         return {"success": True}
 
+    # ── Хранилище файлов пользователей ────────────────────────────────────────
+    USER_FILES_DIR = BASE_DIR / "user_files"
+    USER_FILES_DIR.mkdir(exist_ok=True)
+
+    def _save_user_file(user_id: int, file_data: bytes, filename: str) -> dict:
+        """Сохраняет файл пользователя с метаданными"""
+        user_dir = USER_FILES_DIR / str(user_id)
+        user_dir.mkdir(exist_ok=True)
+
+        file_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{filename}"
+        file_path = user_dir / file_id
+
+        with open(file_path, "wb") as f:
+            f.write(file_data)
+
+        # Сохраняем метаданные
+        metadata = {
+            "id": file_id,
+            "name": filename,
+            "size": len(file_data),
+            "timestamp": datetime.now().timestamp() * 1000,
+            "user_id": user_id
+        }
+
+        metadata_path = user_dir / f"{file_id}.meta.json"
+        with open(metadata_path, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=2)
+
+        return metadata
+
+    def _cleanup_old_files():
+        """Удаляет файлы старше 7 дней"""
+        try:
+            cutoff = datetime.now().timestamp() * 1000 - (7 * 24 * 60 * 60 * 1000)
+
+            for user_dir in USER_FILES_DIR.iterdir():
+                if not user_dir.is_dir():
+                    continue
+
+                for meta_file in user_dir.glob("*.meta.json"):
+                    try:
+                        with open(meta_file, "r", encoding="utf-8") as f:
+                            metadata = json.load(f)
+
+                        if metadata.get("timestamp", 0) < cutoff:
+                            # Удаляем файл и метаданные
+                            file_path = user_dir / metadata["id"]
+                            if file_path.exists():
+                                file_path.unlink()
+                            meta_file.unlink()
+                            logger.info(f"Deleted old file: {metadata['id']}")
+                    except Exception as e:
+                        logger.error(f"Error cleaning up file {meta_file}: {e}")
+        except Exception as e:
+            logger.error(f"Error in cleanup_old_files: {e}")
+
+    def _get_user_files(user_id: int) -> list:
+        """Получает список файлов пользователя"""
+        user_dir = USER_FILES_DIR / str(user_id)
+        if not user_dir.exists():
+            return []
+
+        files = []
+        for meta_file in user_dir.glob("*.meta.json"):
+            try:
+                with open(meta_file, "r", encoding="utf-8") as f:
+                    metadata = json.load(f)
+                files.append(metadata)
+            except Exception as e:
+                logger.error(f"Error reading metadata {meta_file}: {e}")
+
+        return sorted(files, key=lambda x: x.get("timestamp", 0), reverse=True)
+
+    # ── API для админ-панели: файлы пользователя ──────────────────────────────
+    @api_app.get("/api/admin/user-files")
+    async def api_admin_user_files(admin_id: int, target_user_id: int):
+        if admin_id != ADMIN_ID:
+            raise HTTPException(status_code=403, detail="Только для администратора")
+
+        files = _get_user_files(target_user_id)
+        return {"files": files}
+
+    @api_app.get("/api/admin/download-file")
+    async def api_admin_download_file(admin_id: int, file_id: str):
+        if admin_id != ADMIN_ID:
+            raise HTTPException(status_code=403, detail="Только для администратора")
+
+        # Ищем файл во всех директориях пользователей
+        for user_dir in USER_FILES_DIR.iterdir():
+            if not user_dir.is_dir():
+                continue
+
+            file_path = user_dir / file_id
+            if file_path.exists():
+                return FileResponse(
+                    file_path,
+                    media_type="application/octet-stream",
+                    filename=file_id
+                )
+
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
+    # Модифицируем существующие endpoints для сохранения файлов
+    # Это будет происходить автоматически при загрузке файлов через API
+
+    # ── Статические файлы (веб-интерфейс) ────────────────────────────────────
+    @api_app.get("/")
+    async def root():
+        """Главная страница - веб-интерфейс"""
+        index_path = BASE_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path, media_type="text/html")
+        return {"message": "CEK Store Bot API", "status": "running"}
+
+    @api_app.get("/index.html")
+    async def index_html():
+        """Веб-интерфейс"""
+        index_path = BASE_DIR / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path, media_type="text/html")
+        raise HTTPException(status_code=404, detail="index.html not found")
+
 
 # ===========================================================================
 #  MAIN
 # ===========================================================================
+
+
+# ===========================================================================
+#  ПОЛУАВТОМАТИЧЕСКАЯ ПРИЁМКА
+# ===========================================================================
+
+def _is_mac_address(value: str) -> bool:
+    """Проверяет является ли строка МАК-адресом."""
+    import re
+    v = value.strip().upper()
+    # 16 hex символов без разделителей: 22AD96FEFF138D34
+    if re.match(r'^[0-9A-F]{16}$', v):
+        return True
+    # 12 hex без разделителей и без чисто цифровой строки: 22AD96FE138D
+    if re.match(r'^[0-9A-F]{12}$', v) and not v.isdigit():
+        return True
+    # С разделителями : или -
+    if re.match(r'^([0-9A-F]{2}[:\-]){7}[0-9A-F]{2}$', v):
+        return True
+    if re.match(r'^([0-9A-F]{2}[:\-]){5}[0-9A-F]{2}$', v):
+        return True
+    return False
+
+
+def _is_serial_number_acc(value: str) -> bool:
+    """Серийник: только цифры, 6+ знаков."""
+    v = value.strip()
+    return v.isdigit() and len(v) >= 6
+
+
+def _parse_acceptance_text(text: str) -> dict:
+    """
+    Парсит поток сканированных данных.
+    Возвращает: serials (уникальные), macs_removed, dups_removed.
+    """
+    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+    serials = []
+    seen = set()
+    macs_removed = 0
+    dups_removed = 0
+
+    for line in lines:
+        if _is_mac_address(line):
+            macs_removed += 1
+        elif _is_serial_number_acc(line):
+            if line in seen:
+                dups_removed += 1
+            else:
+                seen.add(line)
+                serials.append(line)
+        # остальное игнорируем
+
+    return {
+        "serials": serials,
+        "macs_removed": macs_removed,
+        "dups_removed": dups_removed,
+    }
+
+
+def _acceptance_keyboard(has_serials: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if has_serials:
+        rows.append([InlineKeyboardButton("✅ Получить список", callback_data="acceptance_done")])
+        rows.append([InlineKeyboardButton("🗑 Очистить и начать заново", callback_data="acceptance_clear")])
+    rows.append([back_to_main_btn()[0]])
+    return InlineKeyboardMarkup(rows)
+
+
+async def acceptance_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Точка входа в режим полуавтоматической приёмки."""
+    if not await check_access(update):
+        return CHOOSING
+
+    uid = update.effective_user.id
+    user_sessions[uid] = {"mode": "acceptance", "acc_text": ""}
+
+    text = (
+        "⚡ <b>Полуавтоматическая приёмка</b>\n\n"
+        "Отправляйте сканированные данные сообщениями — "
+        "МАК-адреса и дубли убираются автоматически.\n\n"
+        "📌 <b>Как использовать:</b>\n"
+        "• Направьте сканер на коробку\n"
+        "• Отправьте результат сканирования (всё вместе — серийники и МАКи)\n"
+        "• Можно отправлять несколько сообщений — данные накапливаются\n"
+        "• Когда закончите — нажмите <b>«Получить список»</b>\n\n"
+        "Начните сканировать и отправляйте данные:"
+    )
+
+    q = update.callback_query
+    if q:
+        await q.edit_message_text(text, parse_mode="HTML",
+                                   reply_markup=_acceptance_keyboard(False))
+    else:
+        await update.message.reply_text(text, parse_mode="HTML",
+                                         reply_markup=_acceptance_keyboard(False))
+    return ACCEPTANCE_INPUT
+
+
+async def handle_acceptance_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Принимает очередной блок сканированных данных."""
+    if not await check_access(update):
+        return CHOOSING
+
+    uid = update.effective_user.id
+    sess = user_sessions.get(uid, {})
+    if sess.get("mode") != "acceptance":
+        return CHOOSING
+
+    # Накапливаем текст
+    new_text = update.message.text.strip()
+    existing = sess.get("acc_text", "")
+    combined = (existing + "\n" + new_text).strip() if existing else new_text
+    sess["acc_text"] = combined
+    user_sessions[uid] = sess
+
+    # Удаляем сообщение пользователя (чистота чата)
+    try:
+        await context.bot.delete_message(
+            chat_id=update.message.chat_id,
+            message_id=update.message.message_id
+        )
+    except Exception:
+        pass
+
+    # Парсим накопленное
+    result = _parse_acceptance_text(combined)
+    serials = result["serials"]
+    macs = result["macs_removed"]
+    dups = result["dups_removed"]
+
+    status = (
+        f"⚡ <b>Полуавтоматическая приёмка</b>\n\n"
+        f"✅ Серийников: <b>{len(serials)}</b>\n"
+        f"🔴 МАК убрано: <b>{macs}</b>\n"
+        f"🟡 Дублей убрано: <b>{dups}</b>\n\n"
+    )
+
+    if serials:
+        last5 = serials[-5:]
+        status += "<b>Последние добавленные:</b>\n"
+        status += "\n".join(f"→ <code>{s}</code>" for s in reversed(last5))
+        status += "\n\n<i>Продолжайте сканировать или нажмите «Получить список»</i>"
+    else:
+        status += "<i>Серийников пока не найдено. Продолжайте сканировать...</i>"
+
+    # Редактируем предыдущее сообщение или отправляем новое
+    prev_msg_id = sess.get("acc_msg_id")
+    if prev_msg_id:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=update.message.chat_id,
+                message_id=prev_msg_id,
+                text=status,
+                parse_mode="HTML",
+                reply_markup=_acceptance_keyboard(len(serials) > 0)
+            )
+            return ACCEPTANCE_INPUT
+        except Exception:
+            pass
+
+    sent = await update.message.reply_text(
+        status, parse_mode="HTML",
+        reply_markup=_acceptance_keyboard(len(serials) > 0)
+    )
+    sess["acc_msg_id"] = sent.message_id
+    user_sessions[uid] = sess
+    return ACCEPTANCE_INPUT
+
+
+async def acceptance_clear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Очищает накопленные данные и начинает заново."""
+    uid = update.callback_query.from_user.id
+    user_sessions[uid] = {"mode": "acceptance", "acc_text": ""}
+    await update.callback_query.answer("Очищено")
+    return await acceptance_start(update, context)
+
+
+async def acceptance_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет итоговый список серийников."""
+    q = update.callback_query
+    uid = q.from_user.id
+    await q.answer()
+
+    sess = user_sessions.get(uid, {})
+    combined = sess.get("acc_text", "")
+
+    if not combined:
+        await q.answer("Нет данных", show_alert=True)
+        return ACCEPTANCE_INPUT
+
+    result = _parse_acceptance_text(combined)
+    serials = result["serials"]
+    macs = result["macs_removed"]
+    dups = result["dups_removed"]
+
+    if not serials:
+        await q.edit_message_text(
+            "❌ Серийников не найдено.",
+            reply_markup=_acceptance_keyboard(False)
+        )
+        return ACCEPTANCE_INPUT
+
+    # Формируем итоговое сообщение
+    header = (
+        f"✅ <b>Приёмка завершена!</b>\n\n"
+        f"📊 Серийников: <b>{len(serials)}</b>\n"
+        f"🔴 МАК убрано: <b>{macs}</b>\n"
+        f"🟡 Дублей убрано: <b>{dups}</b>\n"
+    )
+
+    serials_text = "\n".join(serials)
+
+    if len(serials) <= 50:
+        await q.edit_message_text(
+            header + "\n<code>" + serials_text + "</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⚡ Новая приёмка", callback_data="acceptance_clear")],
+                [back_to_main_btn()[0]],
+            ])
+        )
+    else:
+        await q.edit_message_text(
+            header + "\n📎 Список слишком длинный — отправляю файлом.",
+            parse_mode="HTML")
+        from io import BytesIO
+        file_bytes = serials_text.encode("utf-8")
+        await context.bot.send_document(
+            chat_id=q.message.chat_id,
+            document=BytesIO(file_bytes),
+            filename=f"серийники_{len(serials)}шт.txt",
+            caption=f"✅ {len(serials)} серийников · МАКов убрано: {macs} · Дублей: {dups}"
+        )
+        await context.bot.send_message(
+            chat_id=q.message.chat_id,
+            text="Выберите следующее действие:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⚡ Новая приёмка", callback_data="acceptance")],
+                [back_to_main_btn()[0]],
+            ])
+        )
+
+    user_sessions.pop(uid, None)
+    return CHOOSING
 
 def main():
     print("🤖 Бот запускается...")
@@ -3037,6 +3466,12 @@ def main():
     print(f"   Шаблоны: {TEMPLATES_DIR}")
     print(f"   Файл пользователей: {USERS_FILE}")
     print(f"   Администратор: {ADMIN_ID}")
+
+    # Очистка старых файлов пользователей (старше 7 дней)
+    if FASTAPI_AVAILABLE:
+        print("🧹 Очистка старых файлов...")
+        _cleanup_old_files()
+        print("✅ Очистка завершена")
 
     s = check_libs()
     print(f"🐍 Python: {s['python']}")
@@ -3061,6 +3496,7 @@ def main():
                 CommandHandler("start", cmd_start),
                 CommandHandler("app", cmd_app),
                 CommandHandler("supply", supply_start),
+                CommandHandler("acceptance", acceptance_start),
                 MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data_handler),
             ],
             states={
@@ -3141,10 +3577,14 @@ def main():
         application = (
             Application.builder()
             .token(BOT_TOKEN)
-            .read_timeout(120)
-            .write_timeout(180)
-            .connect_timeout(60)
-            .pool_timeout(60)
+            .read_timeout(300)
+            .write_timeout(300)
+            .connect_timeout(120)
+            .pool_timeout(120)
+            .get_updates_read_timeout(300)
+            .get_updates_write_timeout(300)
+            .get_updates_connect_timeout(120)
+            .get_updates_pool_timeout(120)
             .build()
         )
         application.add_handler(conv)
@@ -3157,21 +3597,64 @@ def main():
         application.add_error_handler(error_handler)
 
         if FASTAPI_AVAILABLE:
+            # Устанавливаем глобальную переменную для webhook
+            global _telegram_app
+            _telegram_app = application
+
             uvicorn_config = uvicorn.Config(
                 api_app, host="0.0.0.0", port=API_PORT,
                 log_level="warning", access_log=False,
             )
             uvicorn_server = uvicorn.Server(uvicorn_config)
 
-            async with application:
-                await application.start()
-                await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-                print(f"🤖 Бот запущен!")
-                print(f"🌐 API запущен: http://0.0.0.0:{API_PORT}  (Mini App может подключаться)")
+            # Webhook или Polling
+            if WEBHOOK_URL:
+                # Webhook режим - инициализируем handlers, игнорируя ошибки подключения
+                webhook_path = f"{WEBHOOK_URL}/webhook"
+                print(f"🤖 Бот запущен в режиме WEBHOOK!")
+                print(f"🔗 Webhook URL: {webhook_path}")
+                print(f"🌐 API запущен: http://0.0.0.0:{API_PORT}")
                 print("   Ctrl+C для остановки.")
-                await uvicorn_server.serve()
-                await application.updater.stop()
-                await application.stop()
+
+                # Инициализируем bot и application вручную
+                try:
+                    # Инициализируем внутренние компоненты bot
+                    if hasattr(application.bot, '_request'):
+                        application.bot._request = application.bot._request or []
+
+                    # Устанавливаем bot_data если нужно
+                    if not hasattr(application, 'bot_data'):
+                        application.bot_data = {}
+
+                    # Помечаем bot как инициализированный
+                    application.bot._initialized = True
+
+                    # Инициализируем application
+                    application._initialized = True
+                    application._running = True
+
+                    print("✅ Bot и Application инициализированы для webhook")
+                except Exception as e:
+                    print(f"⚠️ Ошибка инициализации: {e}")
+
+                try:
+                    await uvicorn_server.serve()
+                finally:
+                    application._running = False
+                    application.bot._initialized = False
+            else:
+                # Polling режим (локальная разработка)
+                async with application:
+                    await application.start()
+                    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+                    print(f"🤖 Бот запущен в режиме POLLING!")
+                    print(f"🌐 API запущен: http://0.0.0.0:{API_PORT}  (Mini App может подключаться)")
+                    print("   Ctrl+C для остановки.")
+
+                    await uvicorn_server.serve()
+
+                    await application.updater.stop()
+                    await application.stop()
         else:
             print("🤖 Бот запущен! Ctrl+C для остановки.")
             application.run_polling(allowed_updates=Update.ALL_TYPES)

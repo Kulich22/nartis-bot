@@ -128,9 +128,15 @@
     <button class="btn-card" onclick="goto('supply')">
       <span class="icon">🚚</span><span>Новая поставка</span>
     </button>
+    <button class="btn-card" onclick="goto('acceptance')" style="grid-column:1/-1;background:linear-gradient(135deg,rgba(10,132,255,0.15),rgba(48,209,88,0.15));border:1px solid rgba(10,132,255,0.3)">
+      <span class="icon">⚡</span><span>Полуавтоматическая приёмка</span>
+    </button>
   </div>
   <button class="btn-wide" onclick="goto('help')">
     <span style="font-size:18px">❓</span><span>Помощь</span>
+  </button>
+  <button class="btn-wide" onclick="goto('stats')">
+    <span style="font-size:18px">📊</span><span>Статистика</span>
   </button>
   <button class="btn-wide" id="btn-admin" style="display:none" onclick="goto('admin')">
     <span style="font-size:18px">👑</span><span>Панель администратора</span>
@@ -166,7 +172,14 @@
     <button class="back-btn" onclick="goto('home')">← Назад</button>
     <div class="page-title">📦 Сканирование штрихкодов</div>
   </div>
-  <div class="hint-text">Загрузите фото коробки. Лучше всего — крупное чёткое фото при хорошем освещении. Бот найдёт все числовые штрихкоды.</div>
+  <div class="hint-text">Сделайте фото коробки или загрузите готовое. Лучше всего — крупное чёткое фото при хорошем освещении.</div>
+
+  <!-- Кнопки выбора способа загрузки -->
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn-secondary" style="flex:1" onclick="openCamera('scan')">📸 Сделать фото</button>
+    <button class="btn-secondary" style="flex:1" onclick="document.getElementById('fi-scan').click()">📂 Выбрать файл</button>
+  </div>
+
   <div class="upload-zone" id="uz-scan" onclick="document.getElementById('fi-scan').click()">
     <div class="uz-icon">📸</div>
     <div class="uz-title">Выбрать фото</div>
@@ -279,7 +292,14 @@
   </div>
 
   <div id="supply-phase1">
-    <div class="hint-text">Отправьте фото коробки — бот считает серийные номера с штрихкодов.</div>
+    <div class="hint-text">Сделайте фото коробки или загрузите готовое — бот считает серийные номера с штрихкодов.</div>
+
+    <!-- Кнопки выбора способа загрузки -->
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-secondary" style="flex:1" onclick="openCamera('supply')">📸 Сделать фото</button>
+      <button class="btn-secondary" style="flex:1" onclick="document.getElementById('fi-supply').click()">📂 Выбрать файл</button>
+    </div>
+
     <div class="upload-zone" id="uz-supply" onclick="document.getElementById('fi-supply').click()">
       <div class="uz-icon">📸</div>
       <div class="uz-title">Выбрать фото коробки</div>
@@ -349,22 +369,189 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
+     SCREEN: STATS (Дашборд со статистикой)
+═══════════════════════════════════════════════════════════════ -->
+<div id="screen-stats" class="screen">
+  <div class="page-header">
+    <button class="back-btn" onclick="goto('home')">← Назад</button>
+    <div class="page-title">📊 Статистика</div>
+  </div>
+
+  <!-- Период -->
+  <div style="display:flex;gap:6px;margin-bottom:16px">
+    <button class="btn-secondary" style="flex:1;padding:8px" onclick="statsChangePeriod('day')" id="stats-btn-day">День</button>
+    <button class="btn-secondary" style="flex:1;padding:8px" onclick="statsChangePeriod('week')" id="stats-btn-week">Неделя</button>
+    <button class="btn-secondary" style="flex:1;padding:8px" onclick="statsChangePeriod('month')" id="stats-btn-month">Месяц</button>
+  </div>
+
+  <!-- Общая статистика -->
+  <div class="section-title">Общая статистика</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+    <div style="background:var(--bg2);border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:28px;font-weight:700;color:var(--btn)" id="stats-total-ops">0</div>
+      <div style="font-size:12px;color:var(--hint);margin-top:4px">Всего операций</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:28px;font-weight:700;color:var(--green)" id="stats-total-serials">0</div>
+      <div style="font-size:12px;color:var(--hint);margin-top:4px">Серийников обработано</div>
+    </div>
+  </div>
+
+  <!-- Топ-5 функций -->
+  <div class="section-title">Топ-5 функций</div>
+  <div id="stats-top-functions" style="margin-bottom:16px"></div>
+
+  <!-- График активности -->
+  <div class="section-title">График активности</div>
+  <div id="stats-chart" style="background:var(--bg2);border-radius:12px;padding:16px;margin-bottom:16px">
+    <canvas id="stats-canvas" width="300" height="150"></canvas>
+  </div>
+
+  <!-- Последние операции -->
+  <div class="section-title">Последние операции</div>
+  <div id="stats-recent" style="margin-bottom:16px"></div>
+
+  <!-- Кнопка экспорта -->
+  <button class="btn-primary" onclick="statsExport()">📥 Экспорт истории операций</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
      SCREEN: ADMIN
 ═══════════════════════════════════════════════════════════════ -->
 <div id="screen-admin" class="screen">
   <div class="page-header">
-    <button class="back-btn" onclick="goto('home')">← Назад</button>
+    <button class="back-btn" onclick="adminBack()">← Назад</button>
     <div class="page-title">👑 Администратор</div>
   </div>
-  <div class="section-title">Пользователи</div>
-  <div id="admin-users-list">Загрузка...</div>
-  <div class="divider"></div>
-  <div class="section-title">Добавить пользователя</div>
-  <div class="field-label">Telegram ID</div>
-  <input type="number" id="admin-new-id" placeholder="123456789">
-  <div class="field-label">Имя (необязательно)</div>
-  <input type="text" id="admin-new-name" placeholder="Иван Иванов">
-  <button class="btn-primary" onclick="adminAddUser()">➕ Добавить пользователя</button>
+
+  <!-- Главная панель -->
+  <div id="admin-main">
+    <!-- Общая статистика -->
+    <div class="section-title">Общая статистика системы</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--bg2);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:700;color:var(--btn)" id="admin-total-users">0</div>
+        <div style="font-size:11px;color:var(--hint);margin-top:4px">Всего пользователей</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:24px;font-weight:700;color:var(--green)" id="admin-total-ops">0</div>
+        <div style="font-size:11px;color:var(--hint);margin-top:4px">Всего операций</div>
+      </div>
+    </div>
+
+    <div class="section-title">Пользователи</div>
+    <div id="admin-users-list">Загрузка...</div>
+
+    <div class="divider"></div>
+    <div class="section-title">Добавить пользователя</div>
+    <div class="field-label">Telegram ID</div>
+    <input type="number" id="admin-new-id" placeholder="123456789">
+    <div class="field-label">Имя (необязательно)</div>
+    <input type="text" id="admin-new-name" placeholder="Иван Иванов">
+    <button class="btn-primary" onclick="adminAddUser()">➕ Добавить пользователя</button>
+  </div>
+
+  <!-- Детальная информация о пользователе -->
+  <div id="admin-user-detail" style="display:none">
+    <div class="section-title" id="admin-user-detail-name">Пользователь</div>
+
+    <!-- Статистика пользователя -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div style="background:var(--bg2);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:var(--btn)" id="admin-user-ops">0</div>
+        <div style="font-size:10px;color:var(--hint);margin-top:2px">Операций</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:var(--green)" id="admin-user-serials">0</div>
+        <div style="font-size:10px;color:var(--hint);margin-top:2px">Серийников</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:700;color:var(--orange)" id="admin-user-files">0</div>
+        <div style="font-size:10px;color:var(--hint);margin-top:2px">Файлов</div>
+      </div>
+    </div>
+
+    <!-- Топ функций пользователя -->
+    <div class="section-title">Топ функций</div>
+    <div id="admin-user-top-functions" style="margin-bottom:16px"></div>
+
+    <!-- Последние операции -->
+    <div class="section-title">Последние операции</div>
+    <div id="admin-user-recent" style="margin-bottom:16px"></div>
+
+    <!-- Файлы пользователя -->
+    <div class="section-title">Файлы пользователя</div>
+    <div class="hint-text" style="margin-bottom:8px">Файлы хранятся 7 дней, затем автоматически удаляются</div>
+    <div id="admin-user-files-list"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SCREEN: ACCEPTANCE — Полуавтоматическая приёмка (с коробками)
+═══════════════════════════════════════════════════════════════ -->
+<div id="screen-acceptance" class="screen">
+  <div class="page-header">
+    <button class="back-btn" onclick="goto('home')">← Назад</button>
+    <div class="page-title">⚡ Полуавтоматическая приёмка</div>
+  </div>
+
+  <!-- Подсказка -->
+  <div class="hint-text">
+    📌 Сканируйте всю коробку сканером — МАК-адреса и дубли убираются автоматически.<br>
+    После сканирования введите название коробки/паллеты и нажмите <b>«Добавить коробку»</b>.
+  </div>
+
+  <!-- Счётчик текущей коробки -->
+  <div id="acc-counter" style="display:flex;gap:10px;margin:12px 0">
+    <div style="flex:1;background:rgba(48,209,88,0.12);border:1px solid rgba(48,209,88,0.3);border-radius:12px;padding:10px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#30d158" id="acc-count-serial">0</div>
+      <div style="font-size:11px;color:var(--hint)">серийников</div>
+    </div>
+    <div style="flex:1;background:rgba(255,69,58,0.12);border:1px solid rgba(255,69,58,0.3);border-radius:12px;padding:10px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#ff453a" id="acc-count-mac">0</div>
+      <div style="font-size:11px;color:var(--hint)">МАК убрано</div>
+    </div>
+    <div style="flex:1;background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.3);border-radius:12px;padding:10px;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#ff9f0a" id="acc-count-dup">0</div>
+      <div style="font-size:11px;color:var(--hint)">дублей</div>
+    </div>
+  </div>
+
+  <!-- Поле сканирования -->
+  <div class="field-label">📷 Поле сканирования (наведите сканер)</div>
+  <textarea id="acc-input" rows="6"
+    placeholder="Сканируйте сюда — серийники и МАКи смешанно..."
+    style="font-family:monospace;font-size:14px;width:100%;background:var(--bg2);border:2px solid var(--btn);border-radius:12px;color:var(--fg);padding:12px;margin-top:6px;resize:vertical"
+    oninput="accProcess()"></textarea>
+
+  <!-- Результат текущей коробки (чистый список) -->
+  <div class="field-label" style="margin-top:12px">📋 Серийники текущей коробки:</div>
+  <div id="acc-result" style="background:var(--bg2);border-radius:12px;padding:12px;margin-top:6px;min-height:60px;font-family:monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:var(--fg)">
+    <span style="color:var(--hint)">Серийники появятся здесь после сканирования...</span>
+  </div>
+
+  <!-- НОВОЕ: Поле для ручного ввода названия коробки/паллеты -->
+  <div class="field-label" style="margin-top:12px">📦 Название коробки / паллеты</div>
+  <input type="text" id="acc-box-name" 
+    placeholder="Например: Коробка 1, Паллета А, Стеллаж 2..."
+    style="width:100%;background:var(--bg2);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:var(--fg);font-size:14px;padding:12px;margin-top:6px">
+
+  <!-- Кнопки текущей коробки -->
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn-primary" style="flex:1" onclick="accAddBox()">➕ Добавить коробку</button>
+    <button class="btn-secondary" style="flex:1" onclick="accClearCurrent()">🗑 Очистить поле</button>
+  </div>
+
+  <!-- Список добавленных коробок -->
+  <div id="acc-boxes-section" style="display:none;margin-top:20px">
+    <div class="divider"></div>
+    <div class="field-label" id="acc-boxes-label">📦 Добавленные коробки / паллеты</div>
+    <div class="box-list" id="acc-boxes"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-success" style="flex:1" onclick="accGeneratePDF()">📄 Скачать PDF с QR-кодами</button>
+      <button class="btn-secondary" style="flex:1" onclick="accClearAll()">🗑 Очистить всё</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ ELEMENTS ══ -->
@@ -398,6 +585,540 @@ const state = {
   scan: { lastSerials: [] },
   files: {}
 };
+
+// ═══════════════════════════════════════════════════════════════
+//  СИСТЕМА КЭШИРОВАНИЯ И АВТОСОХРАНЕНИЯ
+// ═══════════════════════════════════════════════════════════════
+
+const Cache = {
+  // Сохранить результат операции
+  saveResult(key, data) {
+    try {
+      const cache = this.getCache();
+      cache[key] = {
+        data: data,
+        timestamp: Date.now(),
+        userId: userId
+      };
+      localStorage.setItem('cek_cache', JSON.stringify(cache));
+    } catch(e) {
+      console.error('Cache save error:', e);
+    }
+  },
+
+  // Получить результат из кэша
+  getResult(key) {
+    try {
+      const cache = this.getCache();
+      const item = cache[key];
+      if (!item) return null;
+
+      // Кэш живет 24 часа
+      const age = Date.now() - item.timestamp;
+      if (age > 24 * 60 * 60 * 1000) {
+        delete cache[key];
+        localStorage.setItem('cek_cache', JSON.stringify(cache));
+        return null;
+      }
+
+      return item.data;
+    } catch(e) {
+      return null;
+    }
+  },
+
+  // Получить весь кэш
+  getCache() {
+    try {
+      return JSON.parse(localStorage.getItem('cek_cache') || '{}');
+    } catch(e) {
+      return {};
+    }
+  },
+
+  // Очистить старый кэш
+  cleanup() {
+    try {
+      const cache = this.getCache();
+      const now = Date.now();
+      let changed = false;
+
+      Object.keys(cache).forEach(key => {
+        const age = now - cache[key].timestamp;
+        if (age > 24 * 60 * 60 * 1000) {
+          delete cache[key];
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        localStorage.setItem('cek_cache', JSON.stringify(cache));
+      }
+    } catch(e) {
+      console.error('Cache cleanup error:', e);
+    }
+  }
+};
+
+// Автосохранение состояния
+const AutoSave = {
+  // Сохранить состояние экрана
+  save(screen, data) {
+    try {
+      const key = `autosave_${screen}_${userId}`;
+      localStorage.setItem(key, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
+    } catch(e) {
+      console.error('AutoSave error:', e);
+    }
+  },
+
+  // Восстановить состояние
+  restore(screen) {
+    try {
+      const key = `autosave_${screen}_${userId}`;
+      const saved = localStorage.getItem(key);
+      if (!saved) return null;
+
+      const item = JSON.parse(saved);
+      // Автосохранение живет 7 дней
+      const age = Date.now() - item.timestamp;
+      if (age > 7 * 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(key);
+        return null;
+      }
+
+      return item.data;
+    } catch(e) {
+      return null;
+    }
+  },
+
+  // Удалить автосохранение
+  clear(screen) {
+    try {
+      const key = `autosave_${screen}_${userId}`;
+      localStorage.removeItem(key);
+    } catch(e) {
+      console.error('AutoSave clear error:', e);
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  ВИБРАЦИЯ (HAPTIC FEEDBACK)
+// ═══════════════════════════════════════════════════════════════
+
+const Haptic = {
+  // Успех
+  success() {
+    try {
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      } else if (navigator.vibrate) {
+        navigator.vibrate([50, 30, 50]);
+      }
+    } catch(e) {}
+  },
+
+  // Ошибка
+  error() {
+    try {
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      } else if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100, 50, 100]);
+      }
+    } catch(e) {}
+  },
+
+  // Предупреждение
+  warning() {
+    try {
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('warning');
+      } else if (navigator.vibrate) {
+        navigator.vibrate([80, 40, 80]);
+      }
+    } catch(e) {}
+  },
+
+  // Легкое нажатие
+  light() {
+    try {
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('light');
+      } else if (navigator.vibrate) {
+        navigator.vibrate(10);
+      }
+    } catch(e) {}
+  },
+
+  // Среднее нажатие
+  medium() {
+    try {
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('medium');
+      } else if (navigator.vibrate) {
+        navigator.vibrate(20);
+      }
+    } catch(e) {}
+  },
+
+  // Сильное нажатие
+  heavy() {
+    try {
+      if (tg.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('heavy');
+      } else if (navigator.vibrate) {
+        navigator.vibrate(40);
+      }
+    } catch(e) {}
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  РАБОТА С КАМЕРОЙ
+// ═══════════════════════════════════════════════════════════════
+
+async function openCamera(context) {
+  try {
+    // Проверяем поддержку камеры
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast('❌ Камера не поддерживается на этом устройстве', 'error');
+      return;
+    }
+
+    Haptic.light();
+
+    // Создаем временный input для захвата фото
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // Использовать заднюю камеру
+
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Сохраняем файл в state
+      state.files[context] = file;
+
+      // Обновляем UI в зависимости от контекста
+      const zones = {
+        scan: 'uz-scan',
+        supply: 'uz-supply'
+      };
+
+      const btns = {
+        scan: 'btn-run-scan',
+        supply: 'btn-supply-scan'
+      };
+
+      const uz = document.getElementById(zones[context]);
+      if (uz) {
+        uz.classList.add('has-file');
+        uz.querySelector('.uz-title').textContent = '📸 ' + file.name;
+        uz.querySelector('.uz-sub').textContent = formatSize(file.size);
+      }
+
+      const btn = document.getElementById(btns[context]);
+      if (btn) btn.disabled = false;
+
+      Haptic.success();
+      toast('✅ Фото готово к обработке', 'success');
+    };
+
+    // Открываем камеру
+    input.click();
+
+  } catch (error) {
+    console.error('Camera error:', error);
+    toast('❌ Ошибка доступа к камере', 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  СТАТИСТИКА И АНАЛИТИКА
+// ═══════════════════════════════════════════════════════════════
+
+const Stats = {
+  currentPeriod: 'week',
+
+  // Сохранить операцию
+  logOperation(type, data) {
+    try {
+      const operations = this.getOperations();
+      operations.push({
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        userId: userId,
+        type: type,
+        data: data,
+        timestamp: Date.now()
+      });
+
+      // Храним только последние 1000 операций
+      if (operations.length > 1000) {
+        operations.splice(0, operations.length - 1000);
+      }
+
+      localStorage.setItem('cek_operations', JSON.stringify(operations));
+    } catch(e) {
+      console.error('Stats log error:', e);
+    }
+  },
+
+  // Получить все операции
+  getOperations() {
+    try {
+      return JSON.parse(localStorage.getItem('cek_operations') || '[]');
+    } catch(e) {
+      return [];
+    }
+  },
+
+  // Фильтр по периоду
+  filterByPeriod(operations, period) {
+    const now = Date.now();
+    let cutoff;
+
+    switch(period) {
+      case 'day':
+        cutoff = now - 24 * 60 * 60 * 1000;
+        break;
+      case 'week':
+        cutoff = now - 7 * 24 * 60 * 60 * 1000;
+        break;
+      case 'month':
+        cutoff = now - 30 * 24 * 60 * 60 * 1000;
+        break;
+      default:
+        cutoff = 0;
+    }
+
+    return operations.filter(op => op.timestamp >= cutoff && op.userId === userId);
+  },
+
+  // Подсчет статистики
+  calculate(period) {
+    const operations = this.filterByPeriod(this.getOperations(), period);
+
+    const stats = {
+      totalOps: operations.length,
+      totalSerials: 0,
+      byType: {},
+      byDay: {}
+    };
+
+    operations.forEach(op => {
+      // Подсчет по типам
+      if (!stats.byType[op.type]) {
+        stats.byType[op.type] = 0;
+      }
+      stats.byType[op.type]++;
+
+      // Подсчет серийников
+      if (op.data.serialsCount) {
+        stats.totalSerials += op.data.serialsCount;
+      }
+
+      // Подсчет по дням
+      const day = new Date(op.timestamp).toLocaleDateString('ru-RU');
+      if (!stats.byDay[day]) {
+        stats.byDay[day] = 0;
+      }
+      stats.byDay[day]++;
+    });
+
+    return stats;
+  }
+};
+
+// Отображение статистики
+function statsChangePeriod(period) {
+  Stats.currentPeriod = period;
+
+  // Обновляем кнопки
+  ['day', 'week', 'month'].forEach(p => {
+    const btn = document.getElementById('stats-btn-' + p);
+    if (p === period) {
+      btn.style.background = 'var(--btn)';
+      btn.style.color = 'var(--btn-text)';
+    } else {
+      btn.style.background = 'var(--bg2)';
+      btn.style.color = 'var(--fg)';
+    }
+  });
+
+  statsRender();
+  Haptic.light();
+}
+
+function statsRender() {
+  const stats = Stats.calculate(Stats.currentPeriod);
+
+  // Общая статистика
+  document.getElementById('stats-total-ops').textContent = stats.totalOps;
+  document.getElementById('stats-total-serials').textContent = stats.totalSerials;
+
+  // Топ-5 функций
+  const topFunctions = Object.entries(stats.byType)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const functionNames = {
+    'scan': '📦 Сканирование',
+    'plomb': '🔍 Обработка пломб',
+    'guarantee': '📋 Реестр гарантии',
+    'qr': '📲 QR-коды',
+    'supply': '🚚 Поставка',
+    'acceptance': '⚡ Приёмка',
+    'template': '📎 Шаблон'
+  };
+
+  let topHtml = '';
+  if (topFunctions.length === 0) {
+    topHtml = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">Нет данных за выбранный период</div>';
+  } else {
+    topFunctions.forEach(([type, count]) => {
+      const name = functionNames[type] || type;
+      const percent = Math.round((count / stats.totalOps) * 100);
+      topHtml += `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:13px">${name}</span>
+            <span style="font-size:14px;font-weight:700">${count}</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;overflow:hidden">
+            <div style="background:var(--btn);height:6px;width:${percent}%;transition:width 0.3s"></div>
+          </div>
+        </div>
+      `;
+    });
+  }
+  document.getElementById('stats-top-functions').innerHTML = topHtml;
+
+  // График активности
+  statsDrawChart(stats.byDay);
+
+  // Последние операции
+  const operations = Stats.filterByPeriod(Stats.getOperations(), Stats.currentPeriod)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10);
+
+  let recentHtml = '';
+  if (operations.length === 0) {
+    recentHtml = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">Нет операций</div>';
+  } else {
+    operations.forEach(op => {
+      const name = functionNames[op.type] || op.type;
+      const date = new Date(op.timestamp).toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      recentHtml += `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:600">${name}</div>
+            <div style="font-size:11px;color:var(--hint)">${date}</div>
+          </div>
+          ${op.data.serialsCount ? `<div style="font-size:12px;color:var(--hint)">${op.data.serialsCount} шт</div>` : ''}
+        </div>
+      `;
+    });
+  }
+  document.getElementById('stats-recent').innerHTML = recentHtml;
+}
+
+function statsDrawChart(byDay) {
+  const canvas = document.getElementById('stats-canvas');
+  const ctx = canvas.getContext('2d');
+
+  // Очистка
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const entries = Object.entries(byDay).sort((a, b) => {
+    const dateA = a[0].split('.').reverse().join('-');
+    const dateB = b[0].split('.').reverse().join('-');
+    return dateA.localeCompare(dateB);
+  });
+
+  if (entries.length === 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '13px -apple-system';
+    ctx.textAlign = 'center';
+    ctx.fillText('Нет данных', canvas.width / 2, canvas.height / 2);
+    return;
+  }
+
+  const maxValue = Math.max(...entries.map(e => e[1]));
+  const barWidth = Math.max(20, (canvas.width - 40) / entries.length);
+  const maxHeight = canvas.height - 40;
+
+  entries.forEach(([day, count], i) => {
+    const height = (count / maxValue) * maxHeight;
+    const x = 20 + i * barWidth;
+    const y = canvas.height - 20 - height;
+
+    // Столбец
+    ctx.fillStyle = 'rgba(10,132,255,0.7)';
+    ctx.fillRect(x, y, barWidth - 4, height);
+
+    // Значение
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '11px -apple-system';
+    ctx.textAlign = 'center';
+    ctx.fillText(count, x + (barWidth - 4) / 2, y - 5);
+
+    // Дата (только день)
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '10px -apple-system';
+    const dayNum = day.split('.')[0];
+    ctx.fillText(dayNum, x + (barWidth - 4) / 2, canvas.height - 5);
+  });
+}
+
+function statsExport() {
+  const operations = Stats.filterByPeriod(Stats.getOperations(), Stats.currentPeriod);
+
+  if (operations.length === 0) {
+    toast('Нет данных для экспорта', 'warning');
+    return;
+  }
+
+  const functionNames = {
+    'scan': 'Сканирование',
+    'plomb': 'Обработка пломб',
+    'guarantee': 'Реестр гарантии',
+    'qr': 'QR-коды',
+    'supply': 'Поставка',
+    'acceptance': 'Приёмка',
+    'template': 'Шаблон'
+  };
+
+  let csv = 'Дата и время,Операция,Серийников\n';
+  operations.forEach(op => {
+    const date = new Date(op.timestamp).toLocaleString('ru-RU');
+    const name = functionNames[op.type] || op.type;
+    const count = op.data.serialsCount || '';
+    csv += `"${date}","${name}","${count}"\n`;
+  });
+
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `статистика_${Stats.currentPeriod}_${today()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  toast('✅ Экспорт завершен', 'success');
+  Haptic.success();
+}
 
 // ── ИНИЦИАЛИЗАЦИЯ ─────────────────────────────────────────────
 async function init() {
@@ -464,6 +1185,37 @@ async function init() {
   } catch(e) {
     badge.innerHTML = '⚠️ Нет связи с сервером · <button onclick="location.reload()" style="background:none;border:none;color:var(--link);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">обновить</button>';
   }
+
+  // Очистка старого кэша
+  Cache.cleanup();
+
+  // Восстановление автосохранений
+  restoreAutoSaves();
+}
+
+// Восстановление автосохранений при загрузке
+function restoreAutoSaves() {
+  // QR коробки
+  const qrData = AutoSave.restore('qr');
+  if (qrData && qrData.boxes) {
+    state.qr.boxes = qrData.boxes;
+    renderQRBoxes();
+  }
+
+  // Supply коробки
+  const supplyData = AutoSave.restore('supply');
+  if (supplyData && supplyData.boxes) {
+    state.supply.boxes = supplyData.boxes;
+    renderSupplyBoxes();
+  }
+
+  // Acceptance коробки
+  const accData = AutoSave.restore('acceptance');
+  if (accData && accData.boxes) {
+    accState.boxes = accData.boxes;
+    accState.lastBoxIndex = accData.lastBoxIndex || 0;
+    renderBoxesList();
+  }
 }
 
 function disableAllCards() {
@@ -484,6 +1236,11 @@ function showScreen(name) {
 function goto(name) {
   if (name === 'home') { showScreen('home'); return; }
   if (name === 'admin') { showScreen('admin'); loadAdminUsers(); return; }
+  if (name === 'stats') {
+    showScreen('stats');
+    statsChangePeriod('week');
+    return;
+  }
   showScreen(name);
   const results = {
     plomb: 'result-plomb', scan: 'result-scan',
@@ -538,6 +1295,17 @@ function toast(msg, type) {
   el.className = 'toast show' + (type ? ' ' + type : '');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+
+  // Вибрация в зависимости от типа
+  if (type === 'success') {
+    Haptic.success();
+  } else if (type === 'error') {
+    Haptic.error();
+  } else if (type === 'warning') {
+    Haptic.warning();
+  } else {
+    Haptic.light();
+  }
 }
 
 async function downloadFile(url, body, filename) {
@@ -568,29 +1336,47 @@ async function runScan() {
     const r = await fetch(API_URL + '/api/scan', { method: 'POST', body: fd });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'Ошибка');
-    
+
     const el = document.getElementById('result-scan');
     if (!data.serials || data.serials.length === 0) {
       el.innerHTML = '<div class="result-box error"><div class="result-title">⚠️ Серийные номера не найдены</div><div class="result-body">Попробуйте другое фото. Убедитесь в хорошем освещении и чёткости штрихкодов.</div></div>';
       document.getElementById('scan-edit-section').style.display = 'none';
+      Haptic.warning();
     } else {
       state.scan.lastSerials = data.serials;
+
+      // Кэшируем результат
+      Cache.saveResult('last_scan', {
+        serials: data.serials,
+        skipped: data.skipped,
+        fileName: file.name
+      });
+
+      // Логируем операцию
+      Stats.logOperation('scan', {
+        serialsCount: data.serials.length,
+        fileName: file.name
+      });
+
       const skippedNote = data.skipped ? '<br><small>Нечисловых пропущено: ' + data.skipped + '</small>' : '';
       el.innerHTML = '<div class="result-box success">' +
         '<div class="result-title">✅ Найдено серийных номеров: ' + data.serials.length + '</div>' +
         '<div class="result-body">' + skippedNote + '</div>' +
         '<div class="serials-list">' + data.serials.join('\n') + '</div>' +
         '</div>';
-      
+
       // Показываем поле для редактирования
       const editSection = document.getElementById('scan-edit-section');
       const editTextarea = document.getElementById('scan-serials-edit');
       editTextarea.value = data.serials.join('\n');
       editSection.style.display = 'block';
+
+      Haptic.success();
     }
   } catch(e) {
     document.getElementById('result-scan').innerHTML =
       '<div class="result-box error"><div class="result-title">❌ Ошибка</div><div class="result-body">' + e.message + '</div></div>';
+    Haptic.error();
   } finally { hideSpinner(); }
 }
 
@@ -627,12 +1413,25 @@ async function runPlomb() {
     fd.append('user_id', userId);
     fd.append('file', file);
     await downloadFile(API_URL + '/api/plomb', fd, 'Пломбы_' + today() + '.xlsx');
+
+    // Кэшируем результат
+    Cache.saveResult('last_plomb', {
+      fileName: file.name,
+      processedAt: new Date().toLocaleString('ru-RU')
+    });
+
+    // Логируем операцию
+    Stats.logOperation('plomb', {
+      fileName: file.name
+    });
+
     document.getElementById('result-plomb').innerHTML =
       '<div class="result-box success"><div class="result-title">✅ Готово!</div><div class="result-body">Файл с результатами скачан.</div></div>';
     toast('Файл скачан', 'success');
   } catch(e) {
     document.getElementById('result-plomb').innerHTML =
       '<div class="result-box error"><div class="result-title">❌ Ошибка</div><div class="result-body">' + e.message + '</div></div>';
+    Haptic.error();
   } finally { hideSpinner(); }
 }
 
@@ -719,6 +1518,25 @@ async function guarGenerate(useAll) {
     fd.append('session_id', state.guar.sessionId);
     fd.append('process_all', useAll ? 'true' : 'false');
     await downloadFile(API_URL + '/api/guarantee/generate', fd, 'Документы_' + today() + '.zip');
+
+    const validCount = state.guar.validation?.valid?.length || 0;
+    const invalidCount = state.guar.validation?.invalid?.length || 0;
+
+    // Кэшируем результат
+    Cache.saveResult('last_guarantee', {
+      validCount: validCount,
+      invalidCount: invalidCount,
+      processedAt: new Date().toLocaleString('ru-RU'),
+      processAll: useAll
+    });
+
+    // Логируем операцию
+    Stats.logOperation('guarantee', {
+      serialsCount: validCount + invalidCount,
+      validCount: validCount,
+      invalidCount: invalidCount
+    });
+
     toast('Архив с документами скачан!', 'success');
     guarReset();
   } catch(e) {
@@ -790,12 +1608,21 @@ function qrAddBox() {
   document.getElementById('qr-label').value = '';
   document.getElementById('qr-serials').value = '';
   renderQRBoxes();
+
+  // Автосохранение
+  AutoSave.save('qr', { boxes: state.qr.boxes });
+
   toast('Коробка добавлена', 'success');
 }
 
 function qrRemoveBox(i) {
   state.qr.boxes.splice(i, 1);
   renderQRBoxes();
+
+  // Автосохранение
+  AutoSave.save('qr', { boxes: state.qr.boxes });
+
+  Haptic.light();
 }
 
 function renderQRBoxes() {
@@ -826,9 +1653,28 @@ async function runQR() {
     fd.append('user_id', userId);
     fd.append('boxes_json', JSON.stringify(state.qr.boxes));
     await downloadFile(API_URL + '/api/qr/generate', fd, 'QR_коды_' + today() + '.pdf');
+
+    const totalSerials = state.qr.boxes.reduce((sum, b) => sum + b.serials.length, 0);
+
+    // Кэшируем результат
+    Cache.saveResult('last_qr', {
+      boxesCount: state.qr.boxes.length,
+      totalSerials: totalSerials,
+      generatedAt: new Date().toLocaleString('ru-RU')
+    });
+
+    // Логируем операцию
+    Stats.logOperation('qr', {
+      serialsCount: totalSerials,
+      boxesCount: state.qr.boxes.length
+    });
+
     toast('PDF скачан!', 'success');
     state.qr.boxes = [];
     renderQRBoxes();
+
+    // Очистка автосохранения
+    AutoSave.clear('qr');
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   } finally { hideSpinner(); }
@@ -886,17 +1732,21 @@ function supplyConfirmBox() {
   const name = document.getElementById('supply-box-name').value.trim();
   const editedText = document.getElementById('supply-serials-edit').value.trim();
   const serials = editedText.split('\n').map(s => s.trim()).filter(Boolean);
-  
+
   if (!name) { toast('Введите название коробки'); return; }
   if (serials.length === 0) { toast('Нет серийных номеров'); return; }
-  
+
   state.supply.boxes.push({ label: name, serials: serials });
   state.supply.currentSerials = [];
-  
+
   document.getElementById('supply-phase2').style.display = 'none';
   renderSupplyBoxes();
+
+  // Автосохранение
+  AutoSave.save('supply', { boxes: state.supply.boxes });
+
   toast('Коробка добавлена', 'success');
-  
+
   // Очищаем input file для следующей коробки
   const fileInput = document.getElementById('fi-supply');
   fileInput.value = '';
@@ -948,6 +1798,11 @@ function renderSupplyBoxes() {
 function supplyRemoveBox(i) {
   state.supply.boxes.splice(i, 1);
   renderSupplyBoxes();
+
+  // Автосохранение
+  AutoSave.save('supply', { boxes: state.supply.boxes });
+
+  Haptic.light();
 }
 
 async function runSupplyGenerate() {
@@ -958,10 +1813,29 @@ async function runSupplyGenerate() {
     fd.append('user_id', userId);
     fd.append('boxes_json', JSON.stringify(state.supply.boxes));
     await downloadFile(API_URL + '/api/supply/generate', fd, 'Поставка_' + today() + '.pdf');
+
+    const totalSerials = state.supply.boxes.reduce((sum, b) => sum + b.serials.length, 0);
+
+    // Кэшируем результат
+    Cache.saveResult('last_supply', {
+      boxesCount: state.supply.boxes.length,
+      totalSerials: totalSerials,
+      generatedAt: new Date().toLocaleString('ru-RU')
+    });
+
+    // Логируем операцию
+    Stats.logOperation('supply', {
+      serialsCount: totalSerials,
+      boxesCount: state.supply.boxes.length
+    });
+
     toast('PDF скачан!', 'success');
     state.supply.boxes = [];
     renderSupplyBoxes();
     supplyRetry();
+
+    // Очистка автосохранения
+    AutoSave.clear('supply');
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   } finally { hideSpinner(); }
@@ -970,21 +1844,248 @@ async function runSupplyGenerate() {
 // ══════════════════════════════════════════════════════════════
 //  ADMIN
 // ══════════════════════════════════════════════════════════════
+
+let currentAdminView = 'main'; // 'main' или 'user-detail'
+let currentAdminUserId = null;
+
+function adminBack() {
+  if (currentAdminView === 'user-detail') {
+    // Возврат к списку пользователей
+    document.getElementById('admin-user-detail').style.display = 'none';
+    document.getElementById('admin-main').style.display = 'block';
+    currentAdminView = 'main';
+    currentAdminUserId = null;
+    Haptic.light();
+  } else {
+    // Возврат на главную
+    goto('home');
+  }
+}
+
 async function loadAdminUsers() {
   const cont = document.getElementById('admin-users-list');
   try {
     const r = await fetch(API_URL + '/api/admin/users?user_id=' + userId);
     if (!r.ok) { cont.textContent = '⛔ Нет доступа'; return; }
     const data = await r.json();
-    if (!data.users.length) { cont.innerHTML = '<div style="color:var(--hint);font-size:13px">Список пуст</div>'; return; }
-    cont.innerHTML = data.users.map(u =>
-      '<div class="user-row">' +
-      '<div class="user-row-info"><div class="user-row-name">' + (u.name || '—') + '</div><div class="user-row-id">' + u.id + '</div></div>' +
-      '<button class="btn-secondary btn-danger" style="width:auto;padding:6px 12px;margin:0" onclick="adminRemoveUser(' + u.id + ')">Удалить</button>' +
-      '</div>'
-    ).join('');
+
+    // Обновляем общую статистику
+    document.getElementById('admin-total-users').textContent = data.users.length;
+
+    // Подсчитываем общее количество операций
+    const allOps = Stats.getOperations();
+    document.getElementById('admin-total-ops').textContent = allOps.length;
+
+    if (!data.users.length) {
+      cont.innerHTML = '<div style="color:var(--hint);font-size:13px">Список пуст</div>';
+      return;
+    }
+
+    // Подсчитываем статистику для каждого пользователя
+    const userStats = {};
+    allOps.forEach(op => {
+      if (!userStats[op.userId]) {
+        userStats[op.userId] = { ops: 0, serials: 0 };
+      }
+      userStats[op.userId].ops++;
+      if (op.data.serialsCount) {
+        userStats[op.userId].serials += op.data.serialsCount;
+      }
+    });
+
+    cont.innerHTML = data.users.map(u => {
+      const stats = userStats[u.id] || { ops: 0, serials: 0 };
+      return `
+        <div class="user-row" style="cursor:pointer" onclick="adminShowUserDetail(${u.id}, '${(u.name || '—').replace(/'/g, "\\'")}')">
+          <div class="user-row-info">
+            <div class="user-row-name">${u.name || '—'}</div>
+            <div class="user-row-id">${u.id}</div>
+            <div style="font-size:11px;color:var(--hint);margin-top:2px">
+              ${stats.ops} операций · ${stats.serials} серийников
+            </div>
+          </div>
+          <button class="btn-secondary btn-danger" style="width:auto;padding:6px 12px;margin:0" onclick="event.stopPropagation(); adminRemoveUser(${u.id})">Удалить</button>
+        </div>
+      `;
+    }).join('');
   } catch(e) {
     cont.textContent = '❌ Ошибка загрузки';
+  }
+}
+
+function adminShowUserDetail(targetUserId, userName) {
+  currentAdminView = 'user-detail';
+  currentAdminUserId = targetUserId;
+
+  // Скрываем главную панель, показываем детальную
+  document.getElementById('admin-main').style.display = 'none';
+  document.getElementById('admin-user-detail').style.display = 'block';
+
+  // Устанавливаем имя пользователя
+  document.getElementById('admin-user-detail-name').textContent = userName + ' (ID: ' + targetUserId + ')';
+
+  // Получаем операции пользователя
+  const allOps = Stats.getOperations().filter(op => op.userId === targetUserId);
+
+  // Подсчитываем статистику
+  let totalSerials = 0;
+  const byType = {};
+
+  allOps.forEach(op => {
+    if (op.data.serialsCount) {
+      totalSerials += op.data.serialsCount;
+    }
+    if (!byType[op.type]) {
+      byType[op.type] = 0;
+    }
+    byType[op.type]++;
+  });
+
+  // Обновляем счетчики
+  document.getElementById('admin-user-ops').textContent = allOps.length;
+  document.getElementById('admin-user-serials').textContent = totalSerials;
+  document.getElementById('admin-user-files').textContent = '—'; // Будет обновлено с сервера
+
+  // Топ функций
+  const functionNames = {
+    'scan': '📦 Сканирование',
+    'plomb': '🔍 Обработка пломб',
+    'guarantee': '📋 Реестр гарантии',
+    'qr': '📲 QR-коды',
+    'supply': '🚚 Поставка',
+    'acceptance': '⚡ Приёмка',
+    'template': '📎 Шаблон'
+  };
+
+  const topFunctions = Object.entries(byType)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  let topHtml = '';
+  if (topFunctions.length === 0) {
+    topHtml = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">Нет данных</div>';
+  } else {
+    topFunctions.forEach(([type, count]) => {
+      const name = functionNames[type] || type;
+      const percent = Math.round((count / allOps.length) * 100);
+      topHtml += `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:13px">${name}</span>
+            <span style="font-size:14px;font-weight:700">${count}</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;overflow:hidden">
+            <div style="background:var(--btn);height:6px;width:${percent}%;transition:width 0.3s"></div>
+          </div>
+        </div>
+      `;
+    });
+  }
+  document.getElementById('admin-user-top-functions').innerHTML = topHtml;
+
+  // Последние операции
+  const recentOps = allOps
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10);
+
+  let recentHtml = '';
+  if (recentOps.length === 0) {
+    recentHtml = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">Нет операций</div>';
+  } else {
+    recentOps.forEach(op => {
+      const name = functionNames[op.type] || op.type;
+      const date = new Date(op.timestamp).toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      recentHtml += `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:600">${name}</div>
+            <div style="font-size:11px;color:var(--hint)">${date}</div>
+          </div>
+          ${op.data.serialsCount ? `<div style="font-size:12px;color:var(--hint)">${op.data.serialsCount} шт</div>` : ''}
+        </div>
+      `;
+    });
+  }
+  document.getElementById('admin-user-recent').innerHTML = recentHtml;
+
+  // Загружаем список файлов с сервера
+  adminLoadUserFiles(targetUserId);
+
+  Haptic.medium();
+}
+
+async function adminLoadUserFiles(targetUserId) {
+  const cont = document.getElementById('admin-user-files-list');
+  cont.innerHTML = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">Загрузка...</div>';
+
+  try {
+    const r = await fetch(API_URL + '/api/admin/user-files?admin_id=' + userId + '&target_user_id=' + targetUserId);
+    if (!r.ok) {
+      cont.innerHTML = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">⛔ Нет доступа</div>';
+      return;
+    }
+
+    const data = await r.json();
+
+    // Обновляем счетчик файлов
+    document.getElementById('admin-user-files').textContent = data.files?.length || 0;
+
+    if (!data.files || data.files.length === 0) {
+      cont.innerHTML = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">Нет файлов</div>';
+      return;
+    }
+
+    let filesHtml = '';
+    data.files.forEach(file => {
+      const date = new Date(file.timestamp).toLocaleString('ru-RU');
+      const daysLeft = Math.max(0, 7 - Math.floor((Date.now() - file.timestamp) / (24 * 60 * 60 * 1000)));
+      filesHtml += `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px">
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600">${file.name}</div>
+              <div style="font-size:11px;color:var(--hint)">${date}</div>
+              <div style="font-size:11px;color:var(--hint)">Размер: ${formatSize(file.size)}</div>
+            </div>
+            <div style="font-size:11px;color:${daysLeft <= 1 ? 'var(--red)' : 'var(--hint)'};text-align:right">
+              ${daysLeft} ${daysLeft === 1 ? 'день' : 'дней'}<br>до удаления
+            </div>
+          </div>
+          <button class="btn-secondary" style="width:100%;padding:8px;margin-top:6px" onclick="adminDownloadFile('${file.id}')">📥 Скачать</button>
+        </div>
+      `;
+    });
+    cont.innerHTML = filesHtml;
+
+  } catch(e) {
+    cont.innerHTML = '<div style="color:var(--hint);font-size:13px;text-align:center;padding:20px">❌ Ошибка загрузки</div>';
+  }
+}
+
+async function adminDownloadFile(fileId) {
+  showSpinner('Загрузка файла...');
+  try {
+    const r = await fetch(API_URL + '/api/admin/download-file?admin_id=' + userId + '&file_id=' + fileId);
+    if (!r.ok) throw new Error('Ошибка загрузки');
+
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileId;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast('✅ Файл скачан', 'success');
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  } finally {
+    hideSpinner();
   }
 }
 
@@ -1025,6 +2126,273 @@ async function adminRemoveUser(targetId) {
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   } finally { hideSpinner(); }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+//  ПОЛУАВТОМАТИЧЕСКАЯ ПРИЁМКА (с коробками)
+// ══════════════════════════════════════════════════════════════
+
+const accState = {
+  currentSerials: [],      // серийники текущей сканируемой коробки
+  macCount: 0,             // убранных МАКов в текущей сессии
+  dupCount: 0,             // убранных дублей в текущей сессии
+  boxes: [],               // добавленные коробки: [{ label, serials }]
+  lastBoxIndex: 0,         // счётчик для автоматических названий
+};
+
+// МАК: 16 hex символов (без разделителей) или с : / -
+function isMacAddress(value) {
+  const v = value.trim().toUpperCase();
+  // 16 hex chars: 22AD96FEFF138D34
+  if (/^[0-9A-F]{16}$/.test(v)) return true;
+  // 12 hex chars без разделителей и не чисто цифровой: 22AD96FE138D
+  if (/^[0-9A-F]{12}$/.test(v) && !/^[0-9]{12}$/.test(v)) return true;
+  // с разделителями: 22:AD:96:FE:FF:13:8D:34 или 22-AD-96-FE-FF-13-8D-34
+  if (/^([0-9A-F]{2}[:\-]){7}[0-9A-F]{2}$/.test(v)) return true;
+  if (/^([0-9A-F]{2}[:\-]){5}[0-9A-F]{2}$/.test(v)) return true;
+  return false;
+}
+
+// Серийник: только цифры, 6+ знаков
+function isSerialNumber(value) {
+  const v = value.trim();
+  return /^\d{6,}$/.test(v);
+}
+
+function accProcess() {
+  const input = document.getElementById('acc-input');
+  const raw = input.value;
+  
+  // Разбиваем по переносам строк
+  const lines = raw.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+  
+  const serials = [];
+  const seen = new Set();
+  let macsFound = 0;
+  let dupsFound = 0;
+  
+  lines.forEach(line => {
+    if (isMacAddress(line)) {
+      macsFound++;
+    } else if (isSerialNumber(line)) {
+      if (seen.has(line)) {
+        dupsFound++;
+      } else {
+        seen.add(line);
+        serials.push(line);
+      }
+    }
+    // остальное игнорируем
+  });
+  
+  accState.currentSerials = serials;
+  accState.macCount = macsFound;
+  accState.dupCount = dupsFound;
+  
+  accRenderCurrent();
+}
+
+function accRenderCurrent() {
+  const serials = accState.currentSerials;
+  
+  document.getElementById('acc-count-serial').textContent = serials.length;
+  document.getElementById('acc-count-mac').textContent = accState.macCount;
+  document.getElementById('acc-count-dup').textContent = accState.dupCount;
+  
+  const resultDiv = document.getElementById('acc-result');
+  if (serials.length === 0) {
+    resultDiv.innerHTML = '<span style="color:var(--hint)">Серийники появятся здесь после сканирования...</span>';
+  } else {
+    resultDiv.innerHTML = serials.map((s, i) => `${i+1}. <code>${s}</code>`).join('<br>');
+  }
+}
+
+function accAddBox() {
+  const serials = accState.currentSerials;
+
+  if (serials.length === 0) {
+    toast('⚠️ Нет серийных номеров для добавления! Сначала отсканируйте коробку.', 'warning');
+    return;
+  }
+
+  // Берём название из поля ввода
+  let boxLabel = document.getElementById('acc-box-name').value.trim();
+
+  // Если поле пустое — генерируем автоматическое название
+  if (!boxLabel) {
+    accState.lastBoxIndex++;
+    boxLabel = `Коробка ${accState.lastBoxIndex}`;
+  } else {
+    // Если пользователь ввёл своё название — увеличиваем счётчик для следующих коробок
+    accState.lastBoxIndex++;
+  }
+
+  accState.boxes.push({
+    label: boxLabel,
+    serials: [...serials]
+  });
+
+  // Очищаем текущее состояние
+  document.getElementById('acc-input').value = '';
+  document.getElementById('acc-box-name').value = '';  // Очищаем поле названия
+  accState.currentSerials = [];
+  accState.macCount = 0;
+  accState.dupCount = 0;
+  accRenderCurrent();
+
+  renderBoxesList();
+
+  // Автосохранение
+  AutoSave.save('acceptance', {
+    boxes: accState.boxes,
+    lastBoxIndex: accState.lastBoxIndex
+  });
+
+  toast(`✅ Коробка "${boxLabel}" добавлена (${serials.length} серийников)`, 'success');
+}
+
+function renderBoxesList() {
+  const section = document.getElementById('acc-boxes-section');
+  const container = document.getElementById('acc-boxes');
+  const labelSpan = document.getElementById('acc-boxes-label');
+  
+  if (accState.boxes.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  
+  section.style.display = 'block';
+  labelSpan.textContent = `📦 Добавленные коробки (${accState.boxes.length})`;
+  
+  container.innerHTML = accState.boxes.map((box, idx) => `
+    <div class="box-item">
+      <div class="box-item-info">
+        <div class="box-item-label">${escapeHtml(box.label)}</div>
+        <div class="box-item-sub">${box.serials.length} серийных номеров</div>
+      </div>
+      <button class="box-remove" onclick="accRemoveBox(${idx})">✕</button>
+    </div>
+  `).join('');
+}
+
+function accRemoveBox(index) {
+  const removed = accState.boxes.splice(index, 1)[0];
+  renderBoxesList();
+
+  // Автосохранение
+  AutoSave.save('acceptance', {
+    boxes: accState.boxes,
+    lastBoxIndex: accState.lastBoxIndex
+  });
+
+  toast(`🗑 Удалена коробка "${removed.label}"`, 'info');
+}
+
+function accClearCurrent() {
+  if (accState.currentSerials.length > 0) {
+    if (!confirm('Очистить текущие сканированные данные?')) return;
+  }
+  document.getElementById('acc-input').value = '';
+  accState.currentSerials = [];
+  accState.macCount = 0;
+  accState.dupCount = 0;
+  accRenderCurrent();
+  toast('🧹 Поле очищено', 'info');
+  Haptic.light();
+}
+
+function accClearAll() {
+  if (accState.boxes.length === 0 && accState.currentSerials.length === 0) {
+    toast('Нет данных для очистки', 'info');
+    return;
+  }
+  if (confirm(`Очистить ВСЕ данные? (${accState.boxes.length} коробок, ${accState.currentSerials.length} текущих серийников)`)) {
+    accState.boxes = [];
+    accState.lastBoxIndex = 0;
+    accState.currentSerials = [];
+    accState.macCount = 0;
+    accState.dupCount = 0;
+    document.getElementById('acc-input').value = '';
+    accRenderCurrent();
+    renderBoxesList();
+
+    // Очистка автосохранения
+    AutoSave.clear('acceptance');
+
+    toast('🧹 Всё очищено', 'info');
+    Haptic.medium();
+  }
+}
+
+async function accGeneratePDF() {
+  if (accState.boxes.length === 0) {
+    toast('❌ Нет добавленных коробок для генерации PDF', 'error');
+    return;
+  }
+
+  showSpinner('⚙️ Генерирую PDF с QR-кодами...');
+
+  try {
+    const fd = new FormData();
+    fd.append('user_id', userId);
+    fd.append('boxes_json', JSON.stringify(accState.boxes));
+
+    const response = await fetch(API_URL + '/api/qr/generate', {
+      method: 'POST',
+      body: fd
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || 'Ошибка генерации');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `приемка_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const totalSerials = accState.boxes.reduce((sum, b) => sum + b.serials.length, 0);
+
+    // Кэшируем результат
+    Cache.saveResult('last_acceptance', {
+      boxesCount: accState.boxes.length,
+      totalSerials: totalSerials,
+      generatedAt: new Date().toLocaleString('ru-RU')
+    });
+
+    // Логируем операцию
+    Stats.logOperation('acceptance', {
+      serialsCount: totalSerials,
+      boxesCount: accState.boxes.length
+    });
+
+    toast(`✅ PDF сгенерирован! (${accState.boxes.length} коробок)`, 'success');
+
+    // Очищаем данные после успешной генерации
+    accState.boxes = [];
+    accState.lastBoxIndex = 0;
+    renderBoxesList();
+
+    // Очистка автосохранения
+    AutoSave.clear('acceptance');
+
+  } catch (err) {
+    toast('❌ Ошибка: ' + err.message, 'error');
+  } finally {
+    hideSpinner();
+  }
+}
+
+// Вспомогательная функция для экранирования HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function today() {
